@@ -40,27 +40,31 @@ int loIRCd_read_line(int soc, char * cmd, char * buf, int buflen)
 	int status = 1;
 	int offset = 0;
 	int command = 1;
-	while((c != '\n')) {
+
+	memset(cmd, 0, CMD_LEN);
+	memset(buf, 0, buflen);
+
+	while((buf[offset] != '\n')&&(buf[offset] != '\r')) {
 		status = recv(soc, buf+offset, 1, 0);
-		if(status > 0) {
-			c = buf[offset];
-			if(offset < buflen) {
-				offset++;
-			}
-			if((c == ' ')&&(command == 1)) {
-				command = 0;
-				buf[offset-1] = '\0';
+		if(status == 1) {
+			if((buf[offset] == ' ')&&(command == 1)) {
+				buf[offset] = '\0';
 				strncpy(cmd, buf, CMD_LEN);
-				offset = 0;
+				offset = command = 0;
+			} else {
+				if(offset < buflen) { offset++; }
 			}
 		} else {
-			usleep(1000000);
+			usleep(100000);
 		}
 	}
-	buf[offset-2] = '\0';
+
+	buf[offset-1] = '\0';
+
 	if(command) {
 		strncpy(cmd, buf, CMD_LEN);
 	}
+
 	return (status>0)?offset:status;
 }
 
@@ -75,6 +79,7 @@ int loIRCd_new_chan(char * name)
 		}
 	}
 	if(i == MAX_CHANS) {
+		printf("too many chans (limit = %d)\n", MAX_CHANS);
 		return -1;
 	}
 	return i;
@@ -205,6 +210,8 @@ void * loIRCd_new_client(void * t)
 
 	loIRCd_client_t *self = (loIRCd_client_t*)t;
 	pthread_detach(self->service);
+	
+	memset(self->chans, 0, sizeof(int)*MAX_CHANS);
 
 	loIRCd_write_line(self->soc, "NOTICE AUTH :*** Looking up your hostname...\n");
 	loIRCd_write_line(self->soc, "NOTICE AUTH :*** Checking ident\n");
