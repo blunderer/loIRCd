@@ -1,56 +1,13 @@
 
-#include <stdio.h>
-#include <errno.h>
-#include <string.h>
-#include <unistd.h>
-#include <time.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <pthread.h>
-
-#define CMD_LEN	10
-#define MAX_CLIENT	10
-#define MAX_CHANS	10
-
-#define ERR_NONICKNAMEGIVEN 431
-#define ERR_ERRONEUSNICKNAME 432
-#define ERR_NICKNAMEINUSE 433
-#define ERR_NICKCOLLISION 436
-
-#define ERR_NEEDMOREPARAMS 461
-#define ERR_ALREADYREGISTRED 462
-
-#define ERR_NOORIGIN 409
-#define ERR_NOSUCHSERVER 402
+#include <loIRCd.h>
 
 static int g_running = 1;
 static int main_socket = -1;
 static int listen_port = 6667;
 static char g_host[256];
 
-typedef struct _loIRCd_chan loIRCd_chan_t;
-typedef struct _loIRCd_client loIRCd_client_t;
-
-struct _loIRCd_chan {
-	int id;
-	char name[512];
-	int clients[MAX_CLIENT];
-};
-
-struct _loIRCd_client {
-	int id;
-	int soc;
-	pthread_t service;
-	char name[512];
-	int chans[MAX_CHANS];
-};
-
-loIRCd_client_t clients[MAX_CLIENT];
-loIRCd_chan_t chans[MAX_CHANS];
+static loIRCd_client_t clients[MAX_CLIENT];
+static loIRCd_chan_t chans[MAX_CHANS];
 
 void loIRCd_usage(void) {
 	printf("loIRCd [-l <listening port>]\n");

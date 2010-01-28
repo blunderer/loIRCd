@@ -1,0 +1,21 @@
+#
+# loIRCD
+#
+
+This is a very little IRC server that can be used in local network when people can't setup a real IRC daemon
+
+You just have to launch 
+	$> ./loIRCd 
+to have a running irc server on [yourmachine:6667]
+You can then connect to it using your favorite IRC client such as:
+- irssi
+- xchat
+- pidgin
+- ...
+
+loIRCd understands:
+- /join #chan
+- /part #chan
+- chatroom
+- private chat
+
