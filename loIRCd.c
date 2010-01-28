@@ -31,7 +31,6 @@ int loIRCd_parse_args(int argc, const char ** argv)
 int loIRCd_write_line(int soc, char * buf)
 {
 	send(soc, buf, strlen(buf), 0);
-	printf("send top %d: %s",soc,buf);
 	return 0;
 }
 
@@ -124,14 +123,12 @@ void loIRCd_join(loIRCd_client_t *self, char *name)
 	int i;
 	int chan_exists = -1;
 	for(i = 0; i < MAX_CHANS; i++) {
-		printf("=====> JOIN chan\n");
 		if(strcmp(chans[i].name, name)==0) {
 			chan_exists = i;
 			break;
 		}
 	}
 	if(chan_exists < 0) {
-		printf("=====> CREATE chan\n");
 		chan_exists = loIRCd_new_chan(name);
 	}
 	if(chan_exists >= 0) {
@@ -177,7 +174,6 @@ void loIRCd_part(loIRCd_client_t *self, char *buf)
 	}
 
 	for(i = 0; i < MAX_CHANS; i++) {
-		printf("=====> PART chan %s?\n", chans[i].name);
 		if(strcmp(chans[i].name, name)==0) {
 			chan_exists = i;
 			break;
@@ -211,7 +207,6 @@ void * loIRCd_new_client(void * t)
 	pthread_detach(self->service);
 
 	loIRCd_write_line(self->soc, "NOTICE AUTH :*** Looking up your hostname...\n");
-	// todo
 	loIRCd_write_line(self->soc, "NOTICE AUTH :*** Checking ident\n");
 	loIRCd_write_line(self->soc, "NOTICE AUTH :*** Found your hostname\n");
 
@@ -243,7 +238,9 @@ void * loIRCd_new_client(void * t)
 		loIRCd_write_line(self->soc, MOTD);
 		sprintf(MOTD, ":loIRC PRIVMSG %s :Welcome to loIRCd hosted by %s\n", self->name, g_host);
 		loIRCd_write_line(self->soc, MOTD);
+		printf("connected new client '%s' on %d\n", self->name, self->id);
 	} else {
+		printf("client failed to connect\n");
 		close(self->soc);
 		self->soc = -1;
 		pthread_exit(NULL);
@@ -253,8 +250,6 @@ void * loIRCd_new_client(void * t)
 		char buf[256];
 		char cmd[CMD_LEN];
 		loIRCd_read_line(self->soc, cmd, buf, 256);
-
-		printf("got %s '%s'\n", cmd,buf);
 
 		if(strcasecmp(cmd, "JOIN") == 0) {
 			loIRCd_join(self, buf);
@@ -267,6 +262,7 @@ void * loIRCd_new_client(void * t)
 			break;
 		}
 	}
+	printf("client %s on %d leaving\n", self->name, self->id);
 
 	close(self->soc);
 	self->soc = -1;
@@ -284,9 +280,13 @@ int loIRCd_connect(void)
 	addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
 	main_socket = socket(AF_INET, SOCK_STREAM, 0);
+	if(main_socket < 0) { printf("cannot create server socket\n"); return -1; }
+
 	setsockopt(main_socket,SOL_SOCKET,SO_REUSEADDR, (const char*)&opt_val, sizeof(int));
 	status = bind(main_socket, (const struct sockaddr*)&addr, sizeof(struct sockaddr_in));
+	if(status < 0) { printf("cannot bind server socket\n"); return -1; }
 	status = listen(main_socket, MAX_CLIENT);
+	if(status < 0) { printf("cannot set server socket to listen\n"); return -1; }
 	return 0;
 }
 
@@ -309,7 +309,9 @@ int main(int argc, const char ** argv)
 		memset(chans[i].name, 0, 256);
 	}
 
-	loIRCd_connect();
+	if(loIRCd_connect() < 0) {
+		exit(-1);
+	}
 
 	while(g_running) {
 		struct sockaddr_in client_addr;
@@ -326,6 +328,7 @@ int main(int argc, const char ** argv)
 		if(i < MAX_CLIENT) {
 			pthread_create(&clients[i].service, NULL, loIRCd_new_client, (void*)&clients[i]);
 		} else {
+			printf("too many clients (limit = %d)\n",MAX_CLIENT);
 			close(client);
 		}
 	}
