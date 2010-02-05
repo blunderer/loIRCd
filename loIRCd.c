@@ -65,9 +65,10 @@ int loIRCd_read_line(int soc, char * cmd, char * buf, int buflen)
 	memset(cmd, 0, CMD_LEN);
 	memset(buf, 0, buflen);
 
-	while((buf[offset] != '\n')&&(buf[offset] != '\r')) {
+	while(c != '\n') {
 		status = recv(soc, buf+offset, 1, 0);
 		if(status == 1) {
+			c = buf[offset];
 			if((buf[offset] == ' ')&&(command == 1)) {
 				buf[offset] = '\0';
 				strncpy(cmd, buf, CMD_LEN);
@@ -81,6 +82,7 @@ int loIRCd_read_line(int soc, char * cmd, char * buf, int buflen)
 	}
 
 	buf[offset-1] = '\0';
+	if(buf[offset-2] == '\r') { buf[offset-2] = '\0'; }
 
 	if(command) {
 		strncpy(cmd, buf, CMD_LEN);
@@ -106,7 +108,7 @@ int loIRCd_new_chan(char * name)
 	return i;
 }
 
-void loIRCd_talk(char *name, char *buf)
+void loIRCd_talk(loIRCd_client_t *self, char *buf)
 {
 	char msg[512];
 	char dest[128];
@@ -118,16 +120,18 @@ void loIRCd_talk(char *name, char *buf)
 		*ptr = 0;
 	}
 
-	sprintf(msg, ":%s PRIVMSG %s\n", name, buf);
+	sprintf(msg, ":%s!%s PRIVMSG %s\n", self->name, self->hostname, buf);
 
 	if(buf[0] == '#')	{
 		int i;
 		for(i = 0; i < MAX_CHANS; i++) {
 			if(strncmp(chans[i].name, dest, strlen(chans[i].name)) == 0) {
 				int j;
-				for(j = 0; j < MAX_CHANS; j++) {
+				for(j = 0; j < MAX_CLIENT; j++) {
 					if(chans[i].clients[j]) {
-						loIRCd_write_line(clients[j].soc, msg);
+						if(j != self->id) {
+							loIRCd_write_line(clients[j].soc, msg);
+						}
 					}
 				}
 				break;
@@ -164,7 +168,7 @@ void loIRCd_join(loIRCd_client_t *self, char *name)
 
 		self->chans[chan_exists] = 1;
 
-		sprintf(msg, ":%s JOIN :%s\n", self->name, name);
+		sprintf(msg, ":%s!%s JOIN :%s\n", self->name, self->hostname, name);
 		sprintf(list, ":loIRCd 353 %s @ %s :%s", self->name, name, self->name);
 		loIRCd_write_line(self->soc, msg);
 
@@ -209,7 +213,7 @@ void loIRCd_part(loIRCd_client_t *self, char *buf)
 		int j;
 		char msg[512];
 
-		sprintf(msg, ":%s PART :%s\n", self->name, buf);
+		sprintf(msg, ":%s!%s PART :%s\n", self->name, self->hostname, buf);
 		for(j = 0; j < MAX_CLIENT; j++) {
 			if(chans[chan_exists].clients[j]) {
 				loIRCd_write_line(clients[j].soc, msg);
@@ -224,9 +228,11 @@ void loIRCd_part(loIRCd_client_t *self, char *buf)
 
 void * loIRCd_new_client(void * t)
 {
+	int i;
 	int user = 0, nick = 0;
 	char cmd1[CMD_LEN], cmd2[CMD_LEN];
 	char param1[256], param2[256];
+	char quit_msg[512] = "Client Quit";
 	int status;
 
 	loIRCd_client_t *self = (loIRCd_client_t*)t;
@@ -266,7 +272,7 @@ void * loIRCd_new_client(void * t)
 		loIRCd_write_line(self->soc, MOTD);
 		sprintf(MOTD, ":loIRC PRIVMSG %s :Welcome to loIRCd hosted by %s\n", self->name, g_host);
 		loIRCd_write_line(self->soc, MOTD);
-		printf("connected new client '%s' on %d\n", self->name, self->id);
+		printf("connected new client '%s' on %d from '%s'\n", self->name, self->id, self->hostname);
 	} else {
 		printf("client failed to connect\n");
 		close(self->soc);
@@ -284,10 +290,18 @@ void * loIRCd_new_client(void * t)
 		} else if(strcasecmp(cmd, "PART") == 0) {
 			loIRCd_part(self, buf);
 		} else if(strcasecmp(cmd, "PRIVMSG") == 0) {
-			loIRCd_talk(self->name, buf);
+			loIRCd_talk(self, buf);
 		} else if(strcasecmp(cmd, "QUIT") == 0) {
-			loIRCd_talk(self->name, buf);
+			strcpy(quit_msg, buf);
 			break;
+		}
+	}
+
+	for(i = 0; i < MAX_CHANS; i++) {
+		if(self->chans[i]) {
+			char msg[512];
+			sprintf(msg, "%s %s", chans[i].name, quit_msg);
+			loIRCd_part(self, msg);
 		}
 	}
 	printf("client %s on %d leaving\n", self->name, self->id);
@@ -349,6 +363,10 @@ int main(int argc, const char ** argv)
 		for(i = 0; i < MAX_CLIENT; i++) {
 			if(clients[i].soc == -1) {
 				clients[i].soc = client;
+				if(client_addr.sin_family == AF_INET)  {
+					char *ip = inet_ntoa(client_addr.sin_addr);
+					strcpy(clients[i].hostname, ip);
+				}
 				break;
 			}
 		}

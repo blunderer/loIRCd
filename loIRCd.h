@@ -56,6 +56,7 @@ struct _loIRCd_client {
 	pthread_t service;
 	char name[512];
 	int chans[MAX_CHANS];
+	char hostname[512];
 };
 
 /// print CLI usage and exit
@@ -74,7 +75,7 @@ void loIRCd_join(loIRCd_client_t *self, char *name);
 void loIRCd_part(loIRCd_client_t *self, char *buf);
 
 /// function to write a message to chan or user
-void loIRCd_talk(char *name, char *buf);
+void loIRCd_talk(loIRCd_client_t *self, char *buf);
 
 /// function that handle new clients connections
 void * loIRCd_new_client(void * t);
