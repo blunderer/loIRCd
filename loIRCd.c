@@ -81,11 +81,14 @@ int loIRCd_read_line(int soc, char * cmd, char * buf, int buflen)
 		}
 	}
 
-	buf[offset-1] = '\0';
-	if(buf[offset-2] == '\r') { buf[offset-2] = '\0'; }
-
-	if(command) {
-		strncpy(cmd, buf, CMD_LEN);
+	if(offset > 1) {
+		buf[offset-1] = '\0';
+		if(buf[offset-2] == '\r') { 
+			buf[offset-2] = '\0'; 
+		}
+		if(command) {
+			strncpy(cmd, buf, CMD_LEN);
+		}
 	}
 
 	return (status>0)?offset:status;
@@ -108,6 +111,37 @@ int loIRCd_new_chan(char * name)
 	return i;
 }
 
+void loIRCd_kick(loIRCd_client_t *self, char *buf)
+{
+	char dest[128];
+	char * ptr;
+	strcpy(dest, buf);
+
+	ptr = strstr(dest, " ");
+	if(ptr) {
+		ptr++;
+		int i, j;
+
+		for(i = 0; i < MAX_CLIENT; i++) {
+			if(strcmp(clients[i].name, ptr) == 0) {
+				for(j = 0; j < MAX_CHANS; j++) {
+					if(clients[i].chans[j]) {
+						char msg[512];
+						sprintf(msg, "kicked");
+						loIRCd_part(&clients[i], msg);
+					}
+				}
+				printf("client %s on %d leaving\n", clients[i].name, clients[i].id);
+
+				close(clients[i].soc);
+				clients[i].soc = -1;
+			}
+		}
+	}
+
+}
+
+ 
 void loIRCd_talk(loIRCd_client_t *self, char *buf)
 {
 	char msg[512];
@@ -260,7 +294,7 @@ void * loIRCd_new_client(void * t)
 		strcpy(self->name, param2);
 	}
 
-	if(nick && user) {
+	if(nick || user) {
 		char MOTD[1256];
 		sprintf(MOTD, ":localhost 001 %s :Welcome on loIRCd\n", self->name);
 		loIRCd_write_line(self->soc, MOTD);
@@ -287,6 +321,8 @@ void * loIRCd_new_client(void * t)
 
 		if(strcasecmp(cmd, "JOIN") == 0) {
 			loIRCd_join(self, buf);
+		} else if(strcasecmp(cmd, "KICK") == 0) {
+			loIRCd_kick(self, buf);
 		} else if(strcasecmp(cmd, "PART") == 0) {
 			loIRCd_part(self, buf);
 		} else if(strcasecmp(cmd, "PRIVMSG") == 0) {
@@ -357,7 +393,7 @@ int main(int argc, const char ** argv)
 
 	while(g_running) {
 		struct sockaddr_in client_addr;
-		unsigned int addrlen;
+		unsigned int addrlen = sizeof(struct sockaddr_in);
 		int client = accept(main_socket, (struct sockaddr*)&client_addr, &addrlen);
 
 		for(i = 0; i < MAX_CLIENT; i++) {
