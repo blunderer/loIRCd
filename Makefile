@@ -2,7 +2,7 @@
 SRC = loIRCd.c
 OBJ = loIRCd.o
 
-CFLAGS = -g -O3 -Wall -Wextra -I.
+CFLAGS = -g -O3 -Wall -Wextra -Wno-unused -I.
 LDFLAGS = -lpthread
 
 TARGET = loIRCd
